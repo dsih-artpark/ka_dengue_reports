@@ -89,7 +89,8 @@ footer = f"""
 # Write header, markdown table, and footer to a markdown file
 with open(report_file_name, "w") as f:
     f.write(header)
-    markdown_table = datadict_df.to_markdown(index=False)
-    f.write(markdown_table)
+
+datadict_df.to_markdown(buf=report_file_name, index=False, mode = "ab")
+
+with open(report_file_name, "a") as f:
     f.write(footer)
-    f.close()
