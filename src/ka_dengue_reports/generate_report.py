@@ -8,13 +8,11 @@ from ka_dengue_reports import get_regionIDs
 analysis_window = 7
 report_file_name = "reports/KA Den Report 17 July.md"
 
-# download_dataset_v2(dsid="GS0015DS0034")
+download_dataset_v2(dsid="GS0015DS0034")
 regionIDs_df, regionIDs_dict = get_regionIDs()
-
 ka_districts = regionIDs_df[regionIDs_df["parentID"]=="state_29"].reset_index(drop=True)
 
-
-# download_dataset_v2(dsid="EP0005DS0014", contains_any = "ihip")
+download_dataset_v2(dsid="EP0005DS0014", contains_any = "ihip")
 
 df = pd.read_csv("data/EP0005DS0014-KA_Dengue_LL/ihip/ka-line-list-ihip.csv")
 
