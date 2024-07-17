@@ -81,12 +81,17 @@ header = f"""### Karnataka Dengue Report, dtd. {datetime.datetime.today().strfti
 * **Hotspots**: {len(hotspots[hotspots["whether_hotspot"]])} villages/wards were identified as hotspots (with 2 or more cases).
 """
 
-with open(report_file_name, "w") as f:
-    f.write(header)
-
-datadict_df.to_markdown(buf=report_file_name, index=False, mode = "ab")
-
 footer = f"""
 ##### Footnote
 * **Location Information Availability**: Out of {len(df)} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
 """
+
+with open(report_file_name, "w") as f:
+    f.write(header)
+
+    datadict_df.to_markdown(buf=report_file_name, index=False, mode = "ab")
+
+    f.write(footer, mode="a")
+
+    f.close()
+
