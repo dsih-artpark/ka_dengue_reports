@@ -169,7 +169,6 @@ for district_code in ka_districts:
     with open(report_file_name, "w") as f:
         f.write(header)
         f.write("\n\n")
-        f.write("\n\n")
         f.write(header2)
         f.write("\n\n")
         f.write(table_md)

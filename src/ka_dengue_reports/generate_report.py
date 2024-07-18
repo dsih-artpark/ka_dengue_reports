@@ -3,24 +3,42 @@ import datetime
 import pandas as pd
 from dataio.download import download_dataset_v2
 
-from ka_dengue_reports import get_regionIDs
+# from ka_dengue_reports import get_regionIDs
+
+def get_regionIDs(*, regionIDs_path="data/GS0015DS0034-LGD_Region_IDs_and_Names/regionids.csv"):
+
+    regionIDs_df = pd.read_csv(regionIDs_path)
+
+    regionIDs_dict = {}
+    for _, row in regionIDs_df.iterrows():
+        regionIDs_dict[row["regionID"]] = {"regionName": row["regionName"],
+                                           "parentID": row["parentID"]
+                                           }
+    return regionIDs_df, regionIDs_dict
 
 
-analysis_window = 7
-report_file_name = "reports/KA Den Report 17 July.md"
 
-download_dataset_v2(dsid="GS0015DS0034")
-regionIDs_df, regionIDs_dict = get_regionIDs()
-ka_districts = regionIDs_df[regionIDs_df["parentID"]=="state_29"].reset_index(drop=True)
+analysis_window = 6
+report_file_name = report_file_name = f"reports/Karnataka-{datetime.datetime.today().strftime('%Y-%m-%d')}.md"
 
-download_dataset_v2(dsid="EP0005DS0014", contains_any = "ihip")
+
+regionIDs_df, regionIDs_dict= get_regionIDs()
+
+## changing regionIDs structure for BBMP, where admin2 = bbmp, admin3 = bbmp and admin5 = ward
+regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionID"]="ulb_276600"
+regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionName"]="BBMP"
+regionIDs_df.loc[regionIDs_df["regionID"].str.startswith("ward_276600"), "parentID"]="ulb_276600"
+
+ka_districts = regionIDs_df[(regionIDs_df["parentID"]=="state_29")]
+
+# download_dataset_v2(dsid="EP0005DS0014", contains_any = "ihip")
 
 df = pd.read_csv("data/EP0005DS0014-KA_Dengue_LL/ihip/ka-line-list-ihip.csv")
 
 # changing reporting for BBMP 
 
-df.loc[df["location.admin3.ID"]=="ulb_276600", "location.admin2.ID"]=df["location.admin3.ID"]
-df.loc[df["location.admin3.ID"]=="ulb_276600", "location.admin2.name"]=df["location.admin3.name"]
+df.loc[df["location.admin3.ID"]=="ulb_276600", "location.admin2.ID"]="ulb_276600"
+df.loc[df["location.admin3.ID"]=="ulb_276600", "location.admin2.name"]="BBMP"
 
 df = df[['location.admin2.ID',
        'location.admin2.name', 'location.admin3.ID', 'location.admin3.name',
@@ -38,59 +56,79 @@ df = df[df['event.test.resultDate'] >= min_date]
 
 # Filtering dataframe for all cases with valid village/ward IDs
 hotspots = df[df["location.admin5.ID"]!="admin_0"]
-hotspots = hotspots.groupby(by = ['location.admin2.ID', 'location.admin2.name', 'location.admin3.ID',
-                                  'location.admin3.name', 'location.admin5.ID', 'location.admin5.name'])['event.test'].sum().reset_index().rename(columns={"event.test":"number_of_cases"})  # noqa: E501
+hotspots = hotspots.groupby(by = ['location.admin2.ID', 'location.admin3.ID',
+                                   'location.admin5.ID', ])['event.test'].sum().reset_index().rename(columns={"event.test":"number_of_cases"})  # noqa: E501
 
-hotspots['whether_hotspot'] = hotspots['number_of_cases'].apply(lambda x: x >= 2)
+hotspots = hotspots[hotspots['number_of_cases']>=2]
 
 # District Table
+district_table = df.groupby(by="location.admin2.ID")["event.test"].sum().reset_index().rename(columns={"event.test":"reported_cases"})  # noqa: E501
 
-district_table = df.groupby(by="location.admin2.ID")["event.test"].sum().reset_index().rename(columns={"event.test":"total_cases_by_district"})  # noqa: E501
-district_table = district_table.merge(hotspots.groupby(by="location.admin2.ID")["whether_hotspot"].sum().reset_index().rename(columns={"whether_hotspot":"number_of_hotspots"}), on="location.admin2.ID", how="left") # noqa: E501
-district_table = district_table.merge(ka_districts, left_on = "location.admin2.ID",
-                                      right_on = "regionID", how = "right").drop(columns = ["location.admin2.ID",
-                                                                                            "regionName", "parentID"]).fillna(0)
-district_table["district_code"] = district_table["regionID"].str.split("_").str.get(1)
+hotspots_by_district = hotspots.groupby(by=["location.admin2.ID"])["number_of_cases"].count().reset_index().rename(columns={"number_of_cases":"number_of_hotspots"})
 
-district_table = district_table.drop(columns = ["regionID"])
-district_table = district_table[["district_code", "location.admin2.name", "total_cases_by_district",
+# merge left with subdistrict table
+district_table = district_table.merge(hotspots_by_district, on=["location.admin2.ID"], how="left")
+
+district_table["number_of_hotspots"] = district_table["number_of_hotspots"].fillna(0)
+
+# add master list of districts
+# do an outer merge to retain admin_0s in the dataset
+
+district_table=district_table.merge(ka_districts, left_on = ["location.admin2.ID"],
+                                      right_on = ["regionID"], how = "outer")
+
+district_table.loc[district_table["location.admin2.ID"].isna(), "location.admin2.ID"] = district_table["regionID"]
+district_table = district_table.drop(columns=["regionID", "regionName", "parentID"])
+district_table.fillna(0, inplace=True)
+
+# Get district names
+district_table["district_name"] = district_table["location.admin2.ID"].apply(lambda x: regionIDs_dict[x]["regionName"] if x!="admin_0" else "-")
+
+district_table["district_code"] = district_table["location.admin2.ID"].str.split("_").str.get(1)
+
+district_table = district_table.drop(columns = ["location.admin2.ID"])
+district_table = district_table.sort_values(by="number_of_hotspots", ascending=False)
+district_table = district_table.drop_duplicates().reset_index(drop=True)
+district_table = district_table[["district_code", "district_name", "reported_cases",
                                  "number_of_hotspots"]]
-district_table = district_table.rename(columns = {"location.admin2.name":"district_name"})
 
-district_table.loc[len(district_table.index)] = [pd.NA, "Total", district_table["total_cases_by_district"].sum(),
+district_table.loc[len(district_table.index)] = ["", "Total", district_table["reported_cases"].sum(),
                                                     district_table["number_of_hotspots"].sum()]
 
 district_table = district_table.rename(columns = {"district_code":"District Code",
                                                   "district_name":"District Name", 
-                                                  "total_cases_by_district":"Reported Cases",
+                                                  "reported_cases":"Reported Cases",
                                                   "number_of_hotspots":"Number of Hotspots"})
-district_dict = district_table.fillna("").to_dict(orient='records')
 
-datadict_df = pd.json_normalize(district_dict)
+district_md = district_table.to_markdown(index=False)
 
 
 cases_with_village_ward_info = len(df[(df["location.admin.coarseness"] == "village") | (df["location.admin.coarseness"] == "ward")])
 cases_with_subdistrict_ulb_info = len(df[(df["location.admin.coarseness"] == "subdistrict") | (df["location.admin.coarseness"] == "ulb")])
 
-header = f"""### Karnataka Dengue Report, dtd. {datetime.datetime.today().strftime('%B %d %Y')}
+header = f"""### Karnataka Dengue Report, dt. {datetime.datetime.today().strftime('%B %d %Y')}
+
 
 #### Summary
 * **Report Period**: {min_date.strftime('%B %d %Y')} - {max_result_date.strftime('%B %d %Y')}
 * **Analysis Window**: {analysis_window} days
 * **Reported Cases**: {len(df)} cases were reported in this time period.
-* **Hotspots**: {len(hotspots[hotspots["whether_hotspot"]])} villages/wards were identified as hotspots (with 2 or more cases).
+* **Hotspots**: {len(hotspots)} villages/wards were identified as hotspots (with 2 or more cases).
 """
 
 
 footer = f"""
-[^1]:Out of {len(df)} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
+<sup>[^1]</sup> Out of {len(df)} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
 """
+
+header2 = f"""#### Number of Hotspots"""
 
 # Write header, markdown table, and footer to a markdown file
 with open(report_file_name, "w") as f:
     f.write(header)
-
-datadict_df.to_markdown(buf=report_file_name, index=False, mode = "ab")
-
-with open(report_file_name, "a") as f:
+    f.write("\n\n")
+    f.write(header2)
+    f.write("\n\n")
+    f.write(district_md)
     f.write(footer)
+
