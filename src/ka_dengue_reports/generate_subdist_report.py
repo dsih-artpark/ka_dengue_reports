@@ -1,11 +1,7 @@
 import datetime
-
 import pandas as pd
-# from dataio.download import download_dataset_v2
-
+from dataio.download import download_dataset_v2
 from importlib.metadata import version
-
-
 
 
 def get_regionIDs(*, regionIDs_path="data/GS0015DS0034-LGD_Region_IDs_and_Names/regionids.csv"):
@@ -20,13 +16,29 @@ def get_regionIDs(*, regionIDs_path="data/GS0015DS0034-LGD_Region_IDs_and_Names/
     return regionIDs_df, regionIDs_dict
 
 
-
-analysis_window = 7
+analysis_window = 6
 # report_file_name = "reports/KA Den Report 17 July.md"
 
 # download_dataset_v2(dsid="GS0015DS0034")
 
 regionIDs_df, _ = get_regionIDs()
+
+
+## changing regionIDs structure for BBMP, where admin2 = bbmp, admin3 = bbmp and admin5 = ward
+regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionID"]="ulb_276600"
+regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionName"]="BBMP"
+regionIDs_df.loc[regionIDs_df["regionID"].str.startswith("ward_276600"), "parentID"]="ulb_276600"
+
+ka_districts = regionIDs_df[regionIDs_df["parentID"]=="state_29"]["regionID"].to_list()
+ka_districts+=["ulb_276600"]
+ka_subdistricts = regionIDs_df[(regionIDs_df["parentID"].isin(ka_districts)) | (regionIDs_df["regionID"].str.startswith("ward_276600"))]
+
+regionIDs_dict = {}
+for index, row in regionIDs_df.iterrows():
+    regionIDs_dict[row["regionID"]] = {"regionName": row["regionName"],
+                                           "parentID": row["parentID"]}
+
+
 
 # download_dataset_v2(dsid="EP0005DS0014", contains_any = "ihip")
 
@@ -87,21 +99,6 @@ subdistrict_table["number_of_hotspots"] = subdistrict_table["number_of_hotspots"
 
 # add master list of subdistricts, names
 
-## changing regionIDs structure for BBMP, where admin2 = bbmp, admin3 = bbmp and admin5 = ward
-regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionID"]="ulb_276600"
-regionIDs_df.loc[regionIDs_df["parentID"]=="ulb_276600", "regionName"]="BBMP"
-regionIDs_df.loc[regionIDs_df["regionID"].str.startswith("ward_276600"), "parentID"]="ulb_276600"
-
-ka_districts = regionIDs_df[regionIDs_df["parentID"]=="state_29"]["regionID"].to_list()
-ka_districts+=["ulb_276600"]
-ka_subdistricts = regionIDs_df[(regionIDs_df["parentID"].isin(ka_districts)) | (regionIDs_df["regionID"].str.startswith("ward_276600"))]
-
-regionIDs_dict = {}
-for index, row in regionIDs_df.iterrows():
-    regionIDs_dict[row["regionID"]] = {"regionName": row["regionName"],
-                                           "parentID": row["parentID"]}
-
-
 # do an outer merge to retain admin_0s in the dataset
 subdistrict_table = subdistrict_table.merge(ka_subdistricts, left_on = ["location.admin2.ID", "location.admin3.ID"],
                                       right_on = ["parentID", "regionID"], how = "outer")
@@ -121,7 +118,7 @@ subdistrict_table = subdistrict_table[["location.admin2.ID", "subdistrict_code",
 # Iterate through districts
 
 # for district_code in ka_districts:
-for district_code in ["ulb_276600"]:
+for district_code in ka_districts:
     district_name = regionIDs_dict[district_code]["regionName"]
     report_file_name = f"reports/{district_name}-{datetime.datetime.today().strftime('%Y-%m-%d')}.md"
 
@@ -151,33 +148,35 @@ for district_code in ["ulb_276600"]:
     cases_with_village_ward_info = len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["village", "ward"]))])
     cases_with_subdistrict_ulb_info = len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["subdistrict", "ulb"]))])
 
-    header = f"""### Karnataka Dengue Report - {district_name} dt. {datetime.datetime.today().strftime('%B %d %Y')}
+    header = f"""## Karnataka Dengue Report - {district_name} dt. {datetime.datetime.today().strftime('%B %d %Y')}
 
 #### Summary
 * **Report Period**: {min_date.strftime('%B %d %Y')} - {max_result_date.strftime('%B %d %Y')}
 * **Analysis Window**: {analysis_window} days
 * **Reported Cases**: {len(df[df["location.admin2.ID"] == district_code])} cases were reported in this time period.
-* **Hotspots**: {len(hotspots[(hotspots["location.admin2.ID"] == district_code)])} villages/wards were identified as hotspots (with 2 or more cases).[^1]
+* **Hotspots**: {len(hotspots[(hotspots["location.admin2.ID"] == district_code)])} villages/wards were identified as hotspots (with 2 or more cases).
 """
 
     footer = f"""
 <sup>[^1]</sup> Out of {len(df[df["location.admin2.ID"] == district_code])} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
 """
     
-    header2 = "#### Top 15 Sub-Districts/ULBs by Hotspots"
+    header2 = f"""#### Top 15 Sub-Districts/ULBs by Hotspots"""
 
-    header3 = "#### List of Hotspots"
+    header3 = f"""#### List of Hotspots"""
 
     # Write header, markdown table, and footer to a markdown file
     with open(report_file_name, "w") as f:
         f.write(header)
         f.write("\n\n")
+        f.write("\n\n")
         f.write(header2)
         f.write("\n\n")
         f.write(table_md)
-        f.write("\n\n")
         f.write(footer)
-        f.write("\n\n---\n\n")  # Adding a separator
+        f.write("\n\n")
         f.write(header3)
         f.write("\n\n")
         f.write(table2_md)
+
+## The End!
