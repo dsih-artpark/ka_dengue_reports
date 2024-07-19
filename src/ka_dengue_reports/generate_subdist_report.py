@@ -144,8 +144,10 @@ for district_code in ka_districts:
                                     "number_of_cases": "**Reported Cases**"})
     table2_md = table2.to_markdown(index=False)
 
-    cases_with_village_ward_info = len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["village", "ward"]))])
-    cases_with_subdistrict_ulb_info = len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["subdistrict", "ulb"]))])
+    cases = df[df["location.admin2.ID"] == district_code]
+    cases_with_village_ward_info = round(len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["village", "ward"]))])/cases*100, 1)
+    cases_with_subdistrict_ulb_info = round(len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["subdistrict", "ulb"]))])/cases*100,1)
+    cases_with_district_info = round(len(df[(df["location.admin2.ID"] == district_code) & (df["location.admin.coarseness"].isin(["district"]))])/cases*100,1)
 
     header = f"""## Karnataka Dengue Report - {district_name} dt. {datetime.datetime.today().strftime('%B %d %Y')}
 
@@ -157,7 +159,7 @@ for district_code in ka_districts:
 """
 
     footer = f"""
-<sup>[^1]</sup> Out of {len(df[df["location.admin2.ID"] == district_code])} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
+<sup>[^1]</sup> Out of {len(df[df["location.admin2.ID"] == district_code])} cases, {cases_with_village_ward_info} cases have upto village/ward level information, {cases_with_subdistrict_ulb_info} cases have upto subdistrict/ULB level information, and {cases_with_district_info} cases have upto district level information.
 """
     
     header2 = f"""#### Top 15 Sub-Districts/ULBs by Hotspots"""

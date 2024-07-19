@@ -91,6 +91,7 @@ district_table = district_table.sort_values(by="number_of_hotspots", ascending=F
 district_table = district_table.drop_duplicates().reset_index(drop=True)
 district_table = district_table[["district_code", "district_name", "reported_cases",
                                  "number_of_hotspots"]]
+district_table.loc[district_table["district_code"]=="0", "district_code"]="-"
 
 district_table.loc[len(district_table.index)] = ["", "Total", district_table["reported_cases"].sum(),
                                                     district_table["number_of_hotspots"].sum()]
@@ -102,23 +103,23 @@ district_table = district_table.rename(columns = {"district_code":"District Code
 
 district_md = district_table.to_markdown(index=False)
 
-
-cases_with_village_ward_info = len(df[(df["location.admin.coarseness"] == "village") | (df["location.admin.coarseness"] == "ward")])
-cases_with_subdistrict_ulb_info = len(df[(df["location.admin.coarseness"] == "subdistrict") | (df["location.admin.coarseness"] == "ulb")])
+cases_with_village_ward_info = round((len(df[(df["location.admin.coarseness"] == "village") | (df["location.admin.coarseness"] == "ward")])/len(df))*100, 1)
+cases_with_subdistrict_ulb_info = round((len(df[(df["location.admin.coarseness"] == "subdistrict") | (df["location.admin.coarseness"] == "ulb")])/len(df))*100, 1)
+cases_with_district_info = round((len(df[df["location.admin.coarseness"]=="district"])/len(df))*100,1)
 
 header = f"""### Karnataka Dengue Report, dt. {datetime.datetime.today().strftime('%B %d %Y')}
 
 
 #### Summary
 * **Report Period**: {min_date.strftime('%B %d %Y')} - {max_result_date.strftime('%B %d %Y')}
-* **Analysis Window**: {analysis_window} days
+* **Analysis Window**: {analysis_window+1} days
 * **Reported Cases**: {len(df)} cases were reported in this time period.
 * **Hotspots**: {len(hotspots)} villages/wards were identified as hotspots (with 2 or more cases).
 """
 
 
 footer = f"""
-<sup>[^1]</sup> Out of {len(df)} cases, {cases_with_village_ward_info} cases have village/ward level information and {cases_with_subdistrict_ulb_info} cases have subdistrict/ULB level information.
+<sup>[^1]</sup> Out of {len(df)} cases, {cases_with_village_ward_info}% cases have upto village/ward level information, {cases_with_subdistrict_ulb_info}% cases have upto subdistrict/ULB level information, and {cases_with_district_info}% cases have upto district information.
 """
 
 header2 = f"""#### Number of Hotspots"""
